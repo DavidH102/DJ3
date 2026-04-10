@@ -2,16 +2,17 @@ namespace DJ3.Api.Caching;
 
 public static class CacheKeys
 {
-    public const string EventPrefix = "event:";
-    public const string EventsPrefix = "events:";
-    public const string AllEvents = "events:all";
-    public const string UpcomingEvents = "events:upcoming";
-    public const string PastEvents = "events:past";
+    public static string TenantPrefix(Guid tenantId) => $"t:{tenantId}:";
+    public static string EventPrefix(Guid tenantId) => $"t:{tenantId}:event:";
+    public static string EventsPrefix(Guid tenantId) => $"t:{tenantId}:events:";
+    public static string AllEvents(Guid tenantId) => $"t:{tenantId}:events:all";
+    public static string UpcomingEvents(Guid tenantId) => $"t:{tenantId}:events:upcoming";
+    public static string PastEvents(Guid tenantId) => $"t:{tenantId}:events:past";
 
-    public static string EventById(Guid id) => $"event:{id}";
-    public static string EventsByCategory(string category) => $"events:category:{category}";
-    public static string EventsByOrganizer(Guid organizerId) => $"events:organizer:{organizerId}";
-    public static string EventStats(Guid id) => $"event:{id}:stats";
-    public static string EventAttendees(Guid id) => $"event:{id}:attendees";
-    public static string SearchResults(string query) => $"events:search:{query}";
+    public static string EventById(Guid tenantId, Guid id) => $"t:{tenantId}:event:{id}";
+    public static string EventsByCategory(Guid tenantId, string category) => $"t:{tenantId}:events:category:{category}";
+    public static string EventsByOrganizer(Guid tenantId, Guid organizerId) => $"t:{tenantId}:events:organizer:{organizerId}";
+    public static string EventStats(Guid tenantId, Guid id) => $"t:{tenantId}:event:{id}:stats";
+    public static string EventAttendees(Guid tenantId, Guid id) => $"t:{tenantId}:event:{id}:attendees";
+    public static string SearchResults(Guid tenantId, string query) => $"t:{tenantId}:events:search:{query}";
 }

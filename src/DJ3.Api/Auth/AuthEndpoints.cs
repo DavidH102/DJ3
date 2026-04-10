@@ -8,7 +8,7 @@ namespace DJ3.Api.Auth;
 
 public static class AuthEndpoints
 {
-    public record TokenRequest(string Username, string Role);
+    public record TokenRequest(string Username, string Role, Guid? TenantId = null);
 
     public static WebApplication MapAuthEndpoints(this WebApplication app)
     {
@@ -22,13 +22,18 @@ public static class AuthEndpoints
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var expiresAt = DateTime.UtcNow.AddMinutes(settings.ExpirationMinutes);
 
-            var claims = new[]
+            var claims = new List<Claim>
             {
-                new Claim(JwtRegisteredClaimNames.Sub, request.Username),
-                new Claim(ClaimTypes.Role, request.Role),
-                new Claim(JwtRegisteredClaimNames.UniqueName, request.Username),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new(JwtRegisteredClaimNames.Sub, request.Username),
+                new(ClaimTypes.Role, request.Role),
+                new(JwtRegisteredClaimNames.UniqueName, request.Username),
+                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
+
+            if (request.TenantId.HasValue)
+            {
+                claims.Add(new Claim("tenant_id", request.TenantId.Value.ToString()));
+            }
 
             var token = new JwtSecurityToken(
                 issuer: settings.Issuer,
