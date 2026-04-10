@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DJ3.Api/DJ3.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DJ3.Api.Tests/DJ3.Api.Tests.csproj" />
+  </Folder>
+</Solution>

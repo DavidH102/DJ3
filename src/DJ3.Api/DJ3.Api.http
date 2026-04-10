@@ -1,0 +1,6 @@
+@DJ3.Api_HostAddress = http://localhost:5226
+
+GET {{DJ3.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
