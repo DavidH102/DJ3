@@ -13,6 +13,8 @@ public static class EventEndpointsV2
         // 1. GET / - GetAllEvents
         group.MapGet("/", async (IEventService service, int page = 1, int pageSize = 20) =>
         {
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            page = Math.Max(1, page);
             var result = await service.GetAllEventsAsync(page, pageSize);
             return Results.Ok(result);
         })
@@ -64,6 +66,8 @@ public static class EventEndpointsV2
         // 6. GET /search - SearchEvents
         group.MapGet("/search", async (IEventService service, string q, int page = 1, int pageSize = 20) =>
         {
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            page = Math.Max(1, page);
             var result = await service.SearchEventsAsync(q, page, pageSize);
             return Results.Ok(result);
         })
@@ -73,6 +77,8 @@ public static class EventEndpointsV2
         // 7. GET /upcoming - GetUpcomingEvents
         group.MapGet("/upcoming", async (IEventService service, int page = 1, int pageSize = 20) =>
         {
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            page = Math.Max(1, page);
             var result = await service.GetUpcomingEventsAsync(page, pageSize);
             return Results.Ok(result);
         })
@@ -82,6 +88,8 @@ public static class EventEndpointsV2
         // 8. GET /past - GetPastEvents
         group.MapGet("/past", async (IEventService service, int page = 1, int pageSize = 20) =>
         {
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            page = Math.Max(1, page);
             var result = await service.GetPastEventsAsync(page, pageSize);
             return Results.Ok(result);
         })
@@ -91,6 +99,8 @@ public static class EventEndpointsV2
         // 9. GET /by-category/{category} - GetEventsByCategory
         group.MapGet("/by-category/{category}", async (IEventService service, string category, int page = 1, int pageSize = 20) =>
         {
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            page = Math.Max(1, page);
             var result = await service.GetEventsByCategoryAsync(category, page, pageSize);
             return Results.Ok(result);
         })
@@ -100,6 +110,8 @@ public static class EventEndpointsV2
         // 10. GET /by-organizer/{organizerId:guid} - GetEventsByOrganizer
         group.MapGet("/by-organizer/{organizerId:guid}", async (IEventService service, Guid organizerId, int page = 1, int pageSize = 20) =>
         {
+            pageSize = Math.Clamp(pageSize, 1, 100);
+            page = Math.Max(1, page);
             var result = await service.GetEventsByOrganizerAsync(organizerId, page, pageSize);
             return Results.Ok(result);
         })
@@ -120,14 +132,20 @@ public static class EventEndpointsV2
         .Produces(StatusCodes.Status409Conflict);
 
         // 12. DELETE /{id:guid}/register/{userId:guid} - UnregisterFromEvent
-        group.MapDelete("/{id:guid}/register/{userId:guid}", async (IEventService service, Guid id, Guid userId) =>
+        group.MapDelete("/{id:guid}/register/{userId:guid}", async (IEventService service, Guid id, Guid userId, HttpContext httpContext) =>
         {
+            var callerSub = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var isAdmin = httpContext.User.IsInRole("Admin");
+            if (!isAdmin && callerSub != userId.ToString())
+                return Results.Forbid();
+
             var removed = await service.UnregisterFromEventAsync(id, userId);
             return removed ? Results.NoContent() : Results.NotFound();
         })
         .RequireAuthorization()
         .WithName("UnregisterFromEvent")
         .Produces(StatusCodes.Status204NoContent)
+        .Produces(StatusCodes.Status403Forbidden)
         .Produces(StatusCodes.Status404NotFound);
 
         // 13. GET /{id:guid}/attendees - GetEventAttendees
