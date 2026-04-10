@@ -2,6 +2,7 @@ using DJ3.Api.Caching;
 using DJ3.Api.Data;
 using DJ3.Api.Models;
 using DJ3.Api.Models.DTOs;
+using DJ3.Api.Tenant;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -12,13 +13,17 @@ public class EventService : IEventService
     private readonly AppDbContext _context;
     private readonly ICacheService _cache;
     private readonly ILogger<EventService> _logger;
+    private readonly ITenantContext _tenantContext;
 
-    public EventService(AppDbContext context, ICacheService cache, ILogger<EventService> logger)
+    public EventService(AppDbContext context, ICacheService cache, ILogger<EventService> logger, ITenantContext tenantContext)
     {
         _context = context;
         _cache = cache;
         _logger = logger;
+        _tenantContext = tenantContext;
     }
+
+    private Guid TenantId => _tenantContext.TenantId;
 
     private static EventResponse MapToResponse(Event e)
     {
@@ -63,13 +68,13 @@ public class EventService : IEventService
 
     private async Task InvalidateCachesAsync()
     {
-        await _cache.RemoveByPrefixAsync(CacheKeys.EventPrefix);
-        await _cache.RemoveByPrefixAsync(CacheKeys.EventsPrefix);
+        await _cache.RemoveByPrefixAsync(CacheKeys.EventPrefix(TenantId));
+        await _cache.RemoveByPrefixAsync(CacheKeys.EventsPrefix(TenantId));
     }
 
     public async Task<PagedResult<EventResponse>> GetAllEventsAsync(int page = 1, int pageSize = 20)
     {
-        var cacheKey = $"{CacheKeys.AllEvents}:p{page}:ps{pageSize}";
+        var cacheKey = $"{CacheKeys.AllEvents(TenantId)}:p{page}:ps{pageSize}";
         var cached = await _cache.GetAsync<PagedResult<EventResponse>>(cacheKey);
         if (cached is not null)
             return cached;
@@ -87,7 +92,7 @@ public class EventService : IEventService
 
     public async Task<EventResponse?> GetEventByIdAsync(Guid id)
     {
-        var cacheKey = CacheKeys.EventById(id);
+        var cacheKey = CacheKeys.EventById(TenantId, id);
         var cached = await _cache.GetAsync<EventResponse>(cacheKey);
         if (cached is not null)
             return cached;
@@ -106,6 +111,7 @@ public class EventService : IEventService
         var ev = new Event
         {
             Id = Guid.NewGuid(),
+            TenantId = TenantId,
             Title = request.Title,
             Description = request.Description,
             Location = request.Location,
@@ -128,7 +134,7 @@ public class EventService : IEventService
         _context.Events.Add(ev);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Created event {EventId} with title '{Title}'", ev.Id, ev.Title);
+        _logger.LogInformation("Created event {EventId} with title '{Title}' for tenant {TenantId}", ev.Id, ev.Title, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -162,7 +168,7 @@ public class EventService : IEventService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Updated event {EventId}", id);
+        _logger.LogInformation("Updated event {EventId} for tenant {TenantId}", id, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -183,7 +189,7 @@ public class EventService : IEventService
         _context.Events.Remove(ev);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Deleted event {EventId}", id);
+        _logger.LogInformation("Deleted event {EventId} for tenant {TenantId}", id, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -192,7 +198,7 @@ public class EventService : IEventService
 
     public async Task<PagedResult<EventResponse>> SearchEventsAsync(string query, int page = 1, int pageSize = 20)
     {
-        var cacheKey = $"{CacheKeys.SearchResults(query)}:p{page}:ps{pageSize}";
+        var cacheKey = $"{CacheKeys.SearchResults(TenantId, query)}:p{page}:ps{pageSize}";
         var cached = await _cache.GetAsync<PagedResult<EventResponse>>(cacheKey);
         if (cached is not null)
             return cached;
@@ -216,7 +222,7 @@ public class EventService : IEventService
 
     public async Task<PagedResult<EventResponse>> GetUpcomingEventsAsync(int page = 1, int pageSize = 20)
     {
-        var cacheKey = $"{CacheKeys.UpcomingEvents}:p{page}:ps{pageSize}";
+        var cacheKey = $"{CacheKeys.UpcomingEvents(TenantId)}:p{page}:ps{pageSize}";
         var cached = await _cache.GetAsync<PagedResult<EventResponse>>(cacheKey);
         if (cached is not null)
             return cached;
@@ -236,7 +242,7 @@ public class EventService : IEventService
 
     public async Task<PagedResult<EventResponse>> GetPastEventsAsync(int page = 1, int pageSize = 20)
     {
-        var cacheKey = $"{CacheKeys.PastEvents}:p{page}:ps{pageSize}";
+        var cacheKey = $"{CacheKeys.PastEvents(TenantId)}:p{page}:ps{pageSize}";
         var cached = await _cache.GetAsync<PagedResult<EventResponse>>(cacheKey);
         if (cached is not null)
             return cached;
@@ -256,7 +262,7 @@ public class EventService : IEventService
 
     public async Task<PagedResult<EventResponse>> GetEventsByCategoryAsync(string category, int page = 1, int pageSize = 20)
     {
-        var cacheKey = $"{CacheKeys.EventsByCategory(category)}:p{page}:ps{pageSize}";
+        var cacheKey = $"{CacheKeys.EventsByCategory(TenantId, category)}:p{page}:ps{pageSize}";
         var cached = await _cache.GetAsync<PagedResult<EventResponse>>(cacheKey);
         if (cached is not null)
             return cached;
@@ -276,7 +282,7 @@ public class EventService : IEventService
 
     public async Task<PagedResult<EventResponse>> GetEventsByOrganizerAsync(Guid organizerId, int page = 1, int pageSize = 20)
     {
-        var cacheKey = $"{CacheKeys.EventsByOrganizer(organizerId)}:p{page}:ps{pageSize}";
+        var cacheKey = $"{CacheKeys.EventsByOrganizer(TenantId, organizerId)}:p{page}:ps{pageSize}";
         var cached = await _cache.GetAsync<PagedResult<EventResponse>>(cacheKey);
         if (cached is not null)
             return cached;
@@ -312,6 +318,7 @@ public class EventService : IEventService
         var registration = new Registration
         {
             Id = Guid.NewGuid(),
+            TenantId = TenantId,
             EventId = eventId,
             UserId = request.UserId,
             UserName = request.UserName,
@@ -325,7 +332,7 @@ public class EventService : IEventService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("User {UserId} registered for event {EventId}", request.UserId, eventId);
+        _logger.LogInformation("User {UserId} registered for event {EventId} in tenant {TenantId}", request.UserId, eventId, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -355,7 +362,7 @@ public class EventService : IEventService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("User {UserId} unregistered from event {EventId}", userId, eventId);
+        _logger.LogInformation("User {UserId} unregistered from event {EventId} in tenant {TenantId}", userId, eventId, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -364,7 +371,7 @@ public class EventService : IEventService
 
     public async Task<List<AttendeeResponse>> GetEventAttendeesAsync(Guid eventId)
     {
-        var cacheKey = CacheKeys.EventAttendees(eventId);
+        var cacheKey = CacheKeys.EventAttendees(TenantId, eventId);
         var cached = await _cache.GetAsync<List<AttendeeResponse>>(cacheKey);
         if (cached is not null)
             return cached;
@@ -398,7 +405,7 @@ public class EventService : IEventService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Published event {EventId}", id);
+        _logger.LogInformation("Published event {EventId} for tenant {TenantId}", id, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -417,7 +424,7 @@ public class EventService : IEventService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Cancelled event {EventId}", id);
+        _logger.LogInformation("Cancelled event {EventId} for tenant {TenantId}", id, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -426,7 +433,7 @@ public class EventService : IEventService
 
     public async Task<EventStatsResponse?> GetEventStatsAsync(Guid id)
     {
-        var cacheKey = CacheKeys.EventStats(id);
+        var cacheKey = CacheKeys.EventStats(TenantId, id);
         var cached = await _cache.GetAsync<EventStatsResponse>(cacheKey);
         if (cached is not null)
             return cached;
@@ -463,6 +470,7 @@ public class EventService : IEventService
         var duplicate = new Event
         {
             Id = Guid.NewGuid(),
+            TenantId = TenantId,
             Title = $"{ev.Title} (Copy)",
             Description = ev.Description,
             Location = ev.Location,
@@ -485,7 +493,7 @@ public class EventService : IEventService
         _context.Events.Add(duplicate);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Duplicated event {OriginalId} as {NewId}", id, duplicate.Id);
+        _logger.LogInformation("Duplicated event {OriginalId} as {NewId} for tenant {TenantId}", id, duplicate.Id, TenantId);
 
         await InvalidateCachesAsync();
 
@@ -504,7 +512,7 @@ public class EventService : IEventService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Rescheduled event {EventId} to {Start} - {End}", id, request.NewStartDate, request.NewEndDate);
+        _logger.LogInformation("Rescheduled event {EventId} to {Start} - {End} for tenant {TenantId}", id, request.NewStartDate, request.NewEndDate, TenantId);
 
         await InvalidateCachesAsync();
 

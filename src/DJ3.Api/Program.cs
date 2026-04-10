@@ -3,6 +3,7 @@ using DJ3.Api.Caching;
 using DJ3.Api.Data;
 using DJ3.Api.Endpoints;
 using DJ3.Api.Services;
+using DJ3.Api.Tenant;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +15,9 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Data Source=dj3.db"));
+
+// Multi-tenancy
+builder.Services.AddMultiTenancy();
 
 // Caching
 builder.Services.AddMemoryCache();
@@ -43,8 +47,12 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Tenant resolution runs after auth so JWT claims are available
+app.UseTenantResolution();
+
 // Map endpoints
 app.MapAuthEndpoints();
+app.MapTenantEndpoints();
 app.MapEventEndpointsV2();
 
 app.Run();

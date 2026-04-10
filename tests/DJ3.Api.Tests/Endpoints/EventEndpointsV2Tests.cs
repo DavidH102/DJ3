@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DJ3.Api.Data;
 using DJ3.Api.Models.DTOs;
+using DJ3.Api.Tenant;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -11,43 +12,32 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DJ3.Api.Tests.Endpoints;
 
-public class CustomWebApplicationFactory : WebApplicationFactory<Program>
-{
-    private readonly string _databaseName = $"TestDb_{Guid.NewGuid()}";
-
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
-        builder.ConfigureServices(services =>
-        {
-            // Remove all DbContext-related registrations to avoid provider conflicts
-            var descriptorsToRemove = services
-                .Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>)
-                         || d.ServiceType == typeof(DbContextOptions)
-                         || d.ServiceType.FullName?.Contains("EntityFrameworkCore") == true)
-                .ToList();
-
-            foreach (var descriptor in descriptorsToRemove)
-                services.Remove(descriptor);
-
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseInMemoryDatabase(_databaseName));
-        });
-
-        builder.UseEnvironment("Development");
-    }
-}
-
 public class EventEndpointsV2Tests : IDisposable
 {
     private readonly CustomWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly Guid _tenantId = Guid.NewGuid();
 
     public EventEndpointsV2Tests()
     {
         _factory = new CustomWebApplicationFactory();
         _client = _factory.CreateClient();
+        _client.DefaultRequestHeaders.Add("X-Tenant-Id", _tenantId.ToString());
         _jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        // Seed test tenant
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Tenants.Add(new TenantEntity
+        {
+            Id = _tenantId,
+            Name = "Test Tenant",
+            Slug = "test-tenant",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        db.SaveChanges();
     }
 
     public void Dispose()
@@ -58,12 +48,13 @@ public class EventEndpointsV2Tests : IDisposable
 
     // ---- Helper Methods ----
 
-    private static async Task<string> GetAuthTokenAsync(HttpClient client, string role = "Admin")
+    private async Task<string> GetAuthTokenAsync(HttpClient client, string role = "Admin")
     {
         var response = await client.PostAsJsonAsync("/api/v2/auth/token", new
         {
-            username = "test",
-            role
+            username = "testuser",
+            role,
+            tenantId = _tenantId
         });
 
         response.EnsureSuccessStatusCode();
@@ -356,5 +347,75 @@ public class EventEndpointsV2Tests : IDisposable
         Assert.Equal(created.Id, stats.EventId);
         Assert.Equal(100, stats.MaxCapacity);
         Assert.Equal(0, stats.TotalRegistrations);
+    }
+
+    [Fact]
+    public async Task GetAllEvents_Returns400_WithoutTenantContext()
+    {
+        // Arrange - create a fresh factory/client with no tenant header and no JWT
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/api/v2/events");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAllEvents_Returns403_WithInactiveTenant()
+    {
+        // Arrange
+        var inactiveTenantId = Guid.NewGuid();
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        // Seed inactive tenant
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Tenants.Add(new TenantEntity
+        {
+            Id = inactiveTenantId,
+            Name = "Inactive Tenant",
+            Slug = "inactive",
+            IsActive = false,
+            CreatedAt = DateTime.UtcNow
+        });
+        db.SaveChanges();
+
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", inactiveTenantId.ToString());
+
+        // Act
+        var response = await client.GetAsync("/api/v2/events");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    private class CustomWebApplicationFactory : WebApplicationFactory<Program>
+    {
+        private readonly string _databaseName = $"TestDb_{Guid.NewGuid()}";
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.ConfigureServices(services =>
+            {
+                // Remove all DbContext-related registrations to avoid provider conflicts
+                var descriptorsToRemove = services
+                    .Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>)
+                             || d.ServiceType == typeof(DbContextOptions)
+                             || d.ServiceType.FullName?.Contains("EntityFrameworkCore") == true)
+                    .ToList();
+
+                foreach (var descriptor in descriptorsToRemove)
+                    services.Remove(descriptor);
+
+                services.AddDbContext<AppDbContext>(options =>
+                    options.UseInMemoryDatabase(_databaseName));
+            });
+
+            builder.UseEnvironment("Development");
+        }
     }
 }
