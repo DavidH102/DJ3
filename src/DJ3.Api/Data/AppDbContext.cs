@@ -28,8 +28,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Category);
             entity.HasIndex(e => e.OrganizerId);
 
-            entity.Property(e => e.Tags)
-                  .HasColumnType("jsonb");
+            entity.Property(e => e.Tags);
         });
 
         modelBuilder.Entity<Registration>(entity =>

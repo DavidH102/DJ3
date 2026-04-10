@@ -12,6 +12,9 @@ public static class AuthEndpoints
 
     public static WebApplication MapAuthEndpoints(this WebApplication app)
     {
+        if (!app.Environment.IsDevelopment())
+            return app;
+
         app.MapPost("/api/v2/auth/token", (TokenRequest request, IOptions<JwtSettings> jwtOptions) =>
         {
             var settings = jwtOptions.Value;
